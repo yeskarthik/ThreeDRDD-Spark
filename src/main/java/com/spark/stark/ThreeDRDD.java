@@ -37,14 +37,13 @@ public class ThreeDRDD implements Serializable {
         return totalTripCount/(n*1.0);
     }
     
-    public static double calculateS(double mean,JavaPairRDD<String,Integer> counts, Integer n)
+    public static double calculateS(double mean, JavaPairRDD<String,Integer> counts, Integer n)
     {
          Long squaresSum = counts.aggregate((long)0, 
             new Function2<Long, Tuple2<String, Integer>, Long> (){
 
                 @Override
                 public Long call(Long v1, Tuple2<String, Integer> v2) throws Exception {
-                    // TODO Auto-generated method stub
                     v1 += v2._2 * v2._2;
                     return v1;
                 }
@@ -80,9 +79,9 @@ public class ThreeDRDD implements Serializable {
             public Boolean call(String v1) throws Exception {
                 if (v1.equals(headerString)) return false;
                 String[] cols = v1.split(",");
-                double Integeritude = Double.parseDouble(cols[1]);
+                double longitude = Double.parseDouble(cols[1]);
                 double latitude = Double.parseDouble(cols[2]);
-                if(Integeritude >-73.7 || Integeritude<-74.25) {
+                if(longitude >-73.7 || longitude<-74.25) {
                     return false;
                 }
                 if(latitude<40.5 || latitude > 40.9 ) {
@@ -96,10 +95,10 @@ public class ThreeDRDD implements Serializable {
             @Override
             public Tuple2<String, Integer> call(String v1) throws Exception {
                 String[] cols = v1.split(",");
-                double Integeritude = ((Double.parseDouble(cols[1]) * 100 ) % 1 == 0)
+                double longitude = ((Double.parseDouble(cols[1]) * 100 ) % 1 == 0)
                             ? (Double.parseDouble(cols[1]) * 100 ): (Double.parseDouble(cols[1]) * 100 - 1);
                 double latitude = Double.parseDouble(cols[2]) * 100;
-                Integer lon = (int)Integeritude;
+                Integer lon = (int)longitude;
                 Integer lat = (int)latitude;
                 String date = Integer.toString(Integer.parseInt(cols[0].split(" ")[0].split("-")[2])- 1);
                 return new Tuple2<String, Integer> (lat.toString()+","+lon.toString()+","+date, (Integer) 1);
@@ -125,10 +124,13 @@ public class ThreeDRDD implements Serializable {
         });
         
         final Map<String, Integer> countMap = mapCountRDD.collectAsMap();
-        final Broadcast<Map<String, Integer>> bc = sc.broadcast(countMap);
-
+        
         final Double mean = calculateMean(countRDD.count(), N);
         final Double sVal = calculateS(mean, mapCountRDD, N);
+        final Broadcast<Map<String, Integer>> bcMap = sc.broadcast(countMap);
+        final Broadcast<Double> bcMean = sc.broadcast(mean);
+        final Broadcast<Double> bcSVal = sc.broadcast(sVal);
+        final Broadcast<Integer> bcN = sc.broadcast(N);
         
         ArrayList<Integer> myArray1=new ArrayList<Integer>();
         ArrayList<Integer> myArray2=new ArrayList<Integer>();
@@ -186,18 +188,18 @@ public class ThreeDRDD implements Serializable {
                                         continue;
                                     String key=""+i+","+j+","+k+"";
                                     wij+=1;
-                                    if(bc.value().containsKey(key))
+                                    if(bcMap.value().containsKey(key))
                                     {
-                                        Integer value=bc.value().get(key);
+                                        Integer value=bcMap.value().get(key);
                                         xintowij+=value;
                                     }
-
+                                        
                                 }
                             }
                         }
-                        double numerator=xintowij-(mean*wij);
-                        double denominator=sVal*Math.sqrt(((N*wij)-(wij*wij))/(N-1));                          
-                        return new Tuple2<String,Double>(row,numerator/denominator);
+                        double numerator = xintowij-(bcMean.value()*wij);
+                        double denominator = bcSVal.value()*Math.sqrt(((bcN.value()*wij)-(wij*wij))/(bcN.value()-1));                          
+                        return new Tuple2<String,Double>(row, numerator/denominator);
                     }           
                 });
         
@@ -216,7 +218,7 @@ public class ThreeDRDD implements Serializable {
             }           
         });
         
-        JavaRDD<String> top50 = sc.parallelize(sortedResult.take(1000));
+        JavaRDD<String> top50 = sc.parallelize(sortedResult.take(50));
         top50.coalesce(1, true).saveAsTextFile(outputPath);        
         
     }
@@ -229,5 +231,3 @@ public class ThreeDRDD implements Serializable {
     }
 
 }
-
-
