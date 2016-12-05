@@ -39,25 +39,19 @@ public class ThreeDRDD implements Serializable {
     
     public static double calculateS(double mean, JavaPairRDD<String,Integer> counts, Integer n)
     {
-         Long squaresSum = counts.aggregate((long)0, 
-            new Function2<Long, Tuple2<String, Integer>, Long> (){
-
-                @Override
-                public Long call(Long v1, Tuple2<String, Integer> v2) throws Exception {
-                    v1 += v2._2 * v2._2;
-                    return v1;
-                }
-            
-        }, new Function2<Long, Long, Long> () {
-
-            @Override
-            public Long call(Long v1, Long v2) throws Exception {
-                return v1+v2;
-            }
-            
-        });
+         JavaPairRDD<String,Long> xsqvaluereducerdd=counts.mapToPair(new PairFunction<Tuple2<String,Integer>,String,Long>(){
+             public Tuple2<String,Long> call(Tuple2<String,Integer> input) throws Exception {
+                 Integer val=input._2;
+                 return new Tuple2<String,Long>("key",(long)val*val);
+ 
+             }
+         }).reduceByKey(new Function2<Long,Long,Long> (){
+             public Long call(Long a, Long b) {
+                 return a + b;
+             }
+         });
         
-        double sqmean=squaresSum/n;
+        double sqmean=xsqvaluereducerdd.first()._2/n;
         double s=sqmean-(mean*mean);
         return Math.sqrt(s);
     }
